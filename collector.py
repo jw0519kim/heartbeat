@@ -11,11 +11,11 @@ from datetime import datetime
 # ⚠️ 중요: 윈도우에서는 이 포트 이름을 'COMX' (예: 'COM3')로 수정해야 합니다.
 SERIAL_PORT = 'COM3' 
 BAUD_RATE = 115200
+EXPECTED_FEILDS = 1
 
 # **[수정사항 4]** CSV 파일 저장 경로 설정
 # 경로의 백슬래시(\)는 Python 문자열에서 이스케이프해야 하므로 두 번( \\ ) 사용합니다.
-SAVE_PATH = "C:\\Users\\jw051\\OneDrive\\Desktop\\김재원\\03_코딩\\파이썬\\피코 프로젝트\\1_감정 측정장치\\0_측정 데이터"
-
+SAVE_PATH = "C:\\jaewon_kim\\02_pico_projects\\9_heartbeat\\data"
 
 def get_user_info():
     """사용자로부터 이름과 성별을 입력받습니다."""
@@ -143,7 +143,7 @@ def collect_data(ser):
                 elif line and not line.startswith(("TRIGGER_START:", ">> CORE0:", "Core 1:", "Warning:", "OK_")):
                     # CSV 데이터 라인 (GSR, TEMP, BPM 3개 항목)
                     data_fields = line.split(',')
-                    if len(data_fields) == 3:
+                    if len(data_fields) == EXPECTED_FEILDS:
                         # 현재 시간 추가 및 저장
                         current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
                         csv_writer.writerow([current_datetime] + data_fields)
