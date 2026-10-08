@@ -1,4 +1,4 @@
-/lib/
-/test_raw_data.py
-/test_bpm.py
-/heart_rate.py
+/python/lib/
+/python/test_raw_data.py
+/python/test_bpm.py
+/python/heart_rate.py
