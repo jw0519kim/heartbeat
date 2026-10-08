@@ -1,3 +1,4 @@
-/max30102 driver/
+/lib/
 /test_raw_data.py
 /test_bpm.py
+/heart_rate.py
