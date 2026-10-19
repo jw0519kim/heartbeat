@@ -26,7 +26,7 @@ import sys
 
 import numpy as np
 
-NOTCH_HZ = (60.0, 34.2)          # 전원 + AD8232 보드 발진. experiment.py 의 DEFAULT_NOTCHES 와 맞춘다
+NOTCH_HZ = ((60.0, 6, 1), (34.15, 4, 2))   # (중심 Hz, Q, 횟수). experiment.py 의 DEFAULT_NOTCHES 와 맞춘다
 BP_LO, BP_HI = 5.0, 20.0          # QRS 검출용 대역통과 (Hz)
 
 
@@ -75,12 +75,13 @@ def notch_biquad(f0, fs, q=6.0):
     return [bi / a[0] for bi in b], [ai / a[0] for ai in a]
 
 
-def mains_notch(x, fs, freqs=NOTCH_HZ):
-    """IIR 노치(영위상, 앞뒤 두 번)를 주파수마다 직렬로."""
-    for f0 in freqs:
+def mains_notch(x, fs, specs=NOTCH_HZ):
+    """IIR 노치(영위상, 앞뒤 두 번)를 사양마다 직렬로."""
+    for f0, q, n in specs:
         if 0 < f0 < fs / 2:
-            b, a = notch_biquad(f0, fs)
-            x = biquad(b, a, biquad(b, a, x)[::-1])[::-1]
+            b, a = notch_biquad(f0, fs, q)
+            for _ in range(n):
+                x = biquad(b, a, biquad(b, a, x)[::-1])[::-1]
     return x
 
 

@@ -10,7 +10,7 @@
   중간: 최근 6초 파형 (R-peak 에 세로 눈금)
   아래: 진폭(pp) 추세 5분  ->  시간에 따라 진폭이 줄어드는지 바로 보인다
 
-  python monitor.py --notch 60          # 노치 주파수 지정 (기본은 experiment.py 의 DEFAULT_NOTCHES: 60,34.2)
+  python monitor.py --notch 60          # 노치 지정 f[:Q[:횟수]] (기본은 experiment.py 의 DEFAULT_NOTCHES)
 
 키:  a  자동 스케일 / 전체 범위(0..65535) 전환
      f  노치 필터 켜기/끄기 (화면 표시에만 적용, 저장 데이터는 원시 그대로)
@@ -34,7 +34,7 @@ from datetime import datetime
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from experiment import SensorReader, RPeakDetector, find_pico_port, now, DEFAULT_NOTCHES   # noqa: E402
+from experiment import SensorReader, RPeakDetector, find_pico_port, now, DEFAULT_NOTCHES, parse_notches, notches_to_text   # noqa: E402
 
 WINDOW_S = 6.0            # 파형 표시 구간
 TREND_S = 300.0           # 진폭 추세 구간
@@ -58,7 +58,7 @@ def notch_coeffs(f0, fs, q=6.0):
 
 def apply_notches(x, coeffs_list):
     y = x
-    for (b0, b1, b2, a1, a2) in coeffs_list:
+    for (b0, b1, b2, a1, a2) in coeffs_list:        # 사양의 횟수만큼 이미 펼쳐져 있다
         out = np.empty_like(y)
         x1 = x2 = y1 = y2 = 0.0
         for i in range(len(y)):
@@ -139,11 +139,11 @@ def main():
     ap = argparse.ArgumentParser(description="실시간 ECG 뷰어")
     ap.add_argument("--port")
     ap.add_argument("--outdir", default="data")
-    ap.add_argument("--notch", default=",".join(f"{f:g}" for f in DEFAULT_NOTCHES),
-                    help="노치 주파수 목록, 쉼표 구분 (기본 %(default)s). 표시와 HR 추정에만 적용")
+    ap.add_argument("--notch", default=notches_to_text(DEFAULT_NOTCHES),
+                    help="노치 목록 f[:Q[:횟수]], 쉼표 구분 (기본 %(default)s). 표시와 HR 추정에만 적용")
     ap.add_argument("--replay", help="피코 대신 저장된 ecg.csv 를 재생")
     args = ap.parse_args()
-    notch_freqs = [float(v) for v in args.notch.split(",") if v.strip()]
+    notch_freqs = parse_notches(args.notch)
 
     if args.replay:
         outdir = None
@@ -174,8 +174,8 @@ def main():
 
     autoscale = True
     notch = True
-    notch_coeffs_list = [notch_coeffs(f0, fs) for f0 in notch_freqs if 0 < f0 < fs / 2]
-    notch_label = ",".join(f"{f0:g}" for f0 in notch_freqs)
+    notch_coeffs_list = [notch_coeffs(f0, fs, q) for f0, q, n in notch_freqs if 0 < f0 < fs / 2 for _ in range(n)]
+    notch_label = ",".join(f"{f0:g}" for f0, q, n in notch_freqs)
     last_fft = 0.0
     dom_f, dom_share, clip_pct = None, 0.0, 0.0
     peaks = deque(maxlen=64)          # 최근 R-peak 시각

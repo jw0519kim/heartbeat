@@ -63,8 +63,28 @@ RING = (60, 60, 75)
 SERIAL_BAUD = 115200
 PICO_VID = 0x2E8A
 MAINS_HZ = 60                          # 전원 주파수 (한국 60)
-BOARD_OSC_HZ = 34.2                    # AD8232 보드 발진 (2026-10-19 녹음에서 확인). 없어지면 지워도 된다
-DEFAULT_NOTCHES = (MAINS_HZ, BOARD_OSC_HZ)   # 실시간 HR 검출기의 기본 노치. 저장 데이터는 원시 그대로
+# 노치 사양: (중심 Hz, Q, 적용 횟수). 보드 발진은 33.8~34.6 Hz 를 떠돌아(2026-10-19 녹음 6개) 34.15 Hz, Q=4 를 두 번 건다.
+# 녹음에서 30-38 Hz 잔류가 34.2/Q6 한 번(0.21)보다 34.15/Q4 두 번(0.065)이 3배 낫고 QRS 대역(5-20 Hz)은 98.5 % 보존.
+DEFAULT_NOTCHES = ((MAINS_HZ, 6, 1), (34.15, 4, 2))   # 실시간 HR 검출기의 기본 노치. 저장 데이터는 원시 그대로
+
+
+def parse_notches(text):
+    """'60,34.15:4:2' → ((60,6,1),(34.15,4,2)). 항목은 f 또는 f:Q 또는 f:Q:횟수."""
+    out = []
+    for item in str(text).split(","):
+        item = item.strip()
+        if not item:
+            continue
+        parts = item.split(":")
+        f0 = float(parts[0])
+        q = float(parts[1]) if len(parts) > 1 else 6.0
+        n = int(parts[2]) if len(parts) > 2 else 1
+        out.append((f0, q, n))
+    return tuple(out)
+
+
+def notches_to_text(specs):
+    return ",".join(f"{f0:g}:{q:g}:{n}" for f0, q, n in specs)
 TICKS_PERIOD = 1 << 30                 # MicroPython ticks_ms wrap
 
 
@@ -121,13 +141,14 @@ class RPeakDetector:
         self.notches = tuple(notches)
         # 2차 IIR 노치 (Q=6). 전원 60 Hz 외에 보드 자체 발진(예: 34.2 Hz)도 같이 지울 수 있다.
         self.nf = []
-        for f0 in self.notches:
+        for f0, q, n in self.notches:
             if 0 < f0 < fs / 2:
                 w0 = 2 * math.pi * f0 / fs
-                alpha = math.sin(w0) / 12.0
+                alpha = math.sin(w0) / (2 * q)
                 c = math.cos(w0)
                 a0 = 1 + alpha
-                self.nf.append([1 / a0, -2 * c / a0, 1 / a0, -2 * c / a0, (1 - alpha) / a0, 0.0, 0.0, 0.0, 0.0])
+                for _ in range(n):
+                    self.nf.append([1 / a0, -2 * c / a0, 1 / a0, -2 * c / a0, (1 - alpha) / a0, 0.0, 0.0, 0.0, 0.0])
         self.dc = None
         self.dc_a = 1.0 - math.exp(-2 * math.pi * 0.7 / fs)     # ~0.7 Hz 고역
         self.lp = 0.0
@@ -473,8 +494,7 @@ class Experiment:
         if not args.no_sensor:
             port = args.port or find_pico_port()
             print(f"피코 연결: {port}")
-            notches = [float(v) for v in args.notch.split(",") if v.strip()]
-            self.sensor = SensorReader(port, self.outdir, self.log, notches)
+            self.sensor = SensorReader(port, self.outdir, self.log, parse_notches(args.notch))
             self.sensor.handshake()
             self.sensor.start()
             print(f"  fs={self.sensor.fs} Hz  sync rtt={self.sensor.sync_rtt_ms:.1f} ms  offset={self.sensor.offset_s:.4f} s")
@@ -717,8 +737,8 @@ def main():
     ap.add_argument("--quick", action="store_true",
                     help="짧은 프로토콜 (안정 10s, 호흡 20s, 재현 10s). 호흡 주기와 데이터 형식은 본 실험과 동일")
     ap.add_argument("--sets", type=int, help="세트 수 제한 (예: --sets 2). 순서는 본 실험과 같은 시드로 뽑은 앞부분")
-    ap.add_argument("--notch", default=",".join(f"{f:g}" for f in DEFAULT_NOTCHES),
-                    help="실시간 HR 추정용 노치 주파수 목록 (기본 %(default)s). 저장 데이터는 원시 그대로")
+    ap.add_argument("--notch", default=notches_to_text(DEFAULT_NOTCHES),
+                    help="실시간 HR 추정용 노치 목록 f[:Q[:횟수]] (기본 %(default)s). 저장 데이터는 원시 그대로")
     args = ap.parse_args()
     if args.quick or args.sets:
         print(f"주의: 짧은 실행 모드 (quick={args.quick}, sets={args.sets})")
