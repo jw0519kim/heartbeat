@@ -8,7 +8,7 @@ main.py               피코 펌웨어 (Thonny 로 피코에 main.py 로 저장)
 experiment.py         실험 진행 프로그램 (PC)
 monitor.py            실시간 ECG 파형 뷰어 (실험 전 전극 상태 확인)
 analyze.py            사후 분석: R-peak, 단계별 HR, 스페이스바 간격
-data/                 세션별 결과 (참가자ID_일시/)
+data/                 세션별 결과 (참가자ID_일시)
 ```
 
 ## 0. 전체 워크플로우
